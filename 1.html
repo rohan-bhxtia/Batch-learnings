@@ -1,0 +1,143 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gesture 3D Particles</title>
+    <style>
+        body { margin: 0; overflow: hidden; background: #000; }
+        #video-container { position: absolute; bottom: 10px; right: 10px; width: 200px; border: 2px solid white; z-index: 10; transform: scaleX(-1); }
+        canvas { display: block; }
+    </style>
+</head>
+<body>
+
+<video id="input_video" style="display:none"></video>
+<div id="video-container">
+    <video id="debug_video" autoplay playsinline style="width: 100%;"></video>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
+
+<script>
+    // --- 1. Three.js Setup ---
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    document.body.appendChild(renderer.domElement);
+
+    const particlesCount = 5000;
+    const posArray = new Float32Array(particlesCount * 3);
+    const velocityArray = new Float32Array(particlesCount * 3);
+
+    for(let i=0; i < particlesCount * 3; i++) {
+        posArray[i] = (Math.random() - 0.5) * 10;
+        velocityArray[i] = 0;
+    }
+
+    const particlesGeometry = new THREE.BufferGeometry();
+    particlesGeometry.setAttribute('position', new THREE.BufferAttribute(posArray, 3));
+
+    const particlesMaterial = new THREE.PointsMaterial({
+        size: 0.05,
+        color: 0x00ffcc,
+        transparent: true,
+        blending: THREE.AdditiveBlending
+    });
+
+    const particlesMesh = new THREE.Points(particlesGeometry, particlesMaterial);
+    scene.add(particlesMesh);
+
+    camera.position.z = 5;
+
+    // --- 2. Hand Tracking Logic ---
+    let handX = 0, handY = 0, isHandPresent = false;
+    let gestureScale = 1;
+
+    const videoElement = document.getElementById('input_video');
+    const debugVideo = document.getElementById('debug_video');
+
+    function onResults(results) {
+        if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
+            isHandPresent = true;
+            const landmarks = results.multiHandLandmarks[0];
+            
+            // Map MediaPipe (0 to 1) to Three.js Screen Space (-5 to 5)
+            handX = (landmarks[9].x - 0.5) * -10; // Inverted for mirror effect
+            handY = (landmarks[9].y - 0.5) * -10;
+
+            // Simple Gesture: Distance between thumb and index for "Expansion"
+            const thumb = landmarks[4];
+            const index = landmarks[8];
+            const dist = Math.sqrt(Math.pow(thumb.x - index.x, 2) + Math.pow(thumb.y - index.y, 2));
+            gestureScale = dist * 10; 
+
+            // Change color based on hand height
+            particlesMaterial.color.setHSL(landmarks[9].y, 1.0, 0.5);
+        } else {
+            isHandPresent = false;
+        }
+    }
+
+    const hands = new Hands({
+        locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
+    });
+
+    hands.setOptions({
+        maxNumHands: 1,
+        modelComplexity: 1,
+        minDetectionConfidence: 0.5,
+        minTrackingConfidence: 0.5
+    });
+    hands.onResults(onResults);
+
+    const cameraInput = new Camera(videoElement, {
+        onFrame: async () => {
+            await hands.send({image: videoElement});
+            debugVideo.srcObject = videoElement.srcObject;
+        },
+        width: 640,
+        height: 480
+    });
+    cameraInput.start();
+
+    // --- 3. Animation Loop ---
+    function animate() {
+        requestAnimationFrame(animate);
+
+        const positions = particlesGeometry.attributes.position.array;
+
+        for (let i = 0; i < particlesCount; i++) {
+            const i3 = i * 3;
+
+            if (isHandPresent) {
+                // Attract to hand
+                positions[i3] += (handX - positions[i3]) * 0.02 * gestureScale;
+                positions[i3+1] += (handY - positions[i3+1]) * 0.02 * gestureScale;
+            } else {
+                // Idle drift
+                positions[i3] += Math.sin(Date.now() * 0.001 + i) * 0.01;
+                positions[i3+1] += Math.cos(Date.now() * 0.001 + i) * 0.01;
+            }
+        }
+
+        particlesGeometry.attributes.position.needsUpdate = true;
+        particlesMesh.rotation.y += 0.002;
+
+        renderer.render(scene, camera);
+    }
+
+    animate();
+
+    window.addEventListener('resize', () => {
+        camera.aspect = window.innerWidth / window.innerHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+</script>
+</body>
+</html>
