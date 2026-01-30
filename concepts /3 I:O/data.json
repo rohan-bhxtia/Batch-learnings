@@ -1,0 +1,7 @@
+{
+  "id": 1,
+  "name": "Rohan",
+  "role": "AI Student",
+  "skills": ["Python", "Machine Learning", "Deep Learning"],
+  "active": true
+}
