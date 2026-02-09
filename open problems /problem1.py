@@ -7,7 +7,7 @@ class products:
         print(f"price of {self.name} is: {self.price}")
 
         count = 0
-    def count(self):
+    def count(self)
         while 
             
 
