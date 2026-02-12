@@ -3,7 +3,7 @@ class products:
         self.name = name
         self.price = price
 
-    def info(self)
+    def info(self):
         print(f"price of {self.name} is: {self.price}")
 
         count = 0
